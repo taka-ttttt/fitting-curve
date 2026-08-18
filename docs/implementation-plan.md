@@ -6,30 +6,25 @@
 
 ## 2. 何を変えるか
 
-現時点で `frontend` は空のため、以下は実装時に作成する主要ファイルの計画である。実際の分割は責務を維持できる範囲で調整する。
+ソースコードは `app / features / shared` の3層で構成する。`app` はルーティングとレイアウトだけに限定し、`features` は業務機能単位、`shared` は業務機能に依存しない共通資産を配置する。依存方向は `app → features → shared` とし、逆依存と `app` からfeature内部への直接参照をESLintで禁止する。DB・外部API接続を行わないため `external` 層は設けない。
 
 | ファイル | 変更内容 | 種別 |
 |---|---|---|
 | `frontend/package.json` | Next.js、Tailwind CSS、shadcn/ui、Zustand、数値処理、CSV、グラフ、テストの依存関係とスクリプト | 新規 |
 | `frontend/next.config.ts` | EChartsとZRenderのトランスパイル設定 | 新規 |
 | `frontend/src/app/layout.tsx` | アプリ共通レイアウトとメタデータ | 新規 |
-| `frontend/src/app/page.tsx` | ワークフロー画面の組み立て | 新規 |
+| `frontend/src/app/page.tsx` | featureの公開APIを呼び出す薄いルート | 新規 |
 | `frontend/src/app/globals.css` | 共通スタイルとデザイントークン | 新規 |
-| `frontend/src/features/import/` | CSV選択、プレビュー、列・単位割り当て | 新規 |
-| `frontend/src/features/material/` | ヤング率、降伏応力の入力と検証 | 新規 |
-| `frontend/src/features/conversion/` | 真応力・真塑性ひずみへの変換UI | 新規 |
-| `frontend/src/features/fitting/` | モデル選択、範囲操作、自動・手動フィッティングUI | 新規 |
-| `frontend/src/features/export/` | 再サンプリング、CSV、LS-DYNAプレビュー・コピーUI | 新規 |
-| `frontend/src/components/curve-chart/` | 点・線表示、間引き、範囲選択を共通化したグラフ | 新規 |
-| `frontend/src/stores/curve-workflow-store.ts` | Zustandによるワークフロー状態と各工程の無効化制御 | 新規 |
-| `frontend/src/lib/validation/` | Zodスキーマとフォーム入力の検証 | 新規 |
-| `frontend/src/domain/curve/` | カーブ、単位、材料物性、処理状態の型 | 新規 |
-| `frontend/src/domain/transform/` | 工学値・真全ひずみから真塑性ひずみへの変換 | 新規 |
-| `frontend/src/domain/hardening/` | Ludwik、Swift、Voceの式とパラメータ制約 | 新規 |
-| `frontend/src/domain/fitting/` | 目的関数、初期値探索、最適化、適合度計算 | 新規 |
-| `frontend/src/domain/export/` | 区間別の非等間隔再サンプリング、有効数字丸め、出力形式生成 | 新規 |
-| `frontend/src/workers/fitting.worker.ts` | 重いフィッティング計算のUIスレッドからの分離 | 新規 |
-| `frontend/src/config/curve.ts` | 描画点数上限、パラメータ境界、エクスポート点配分などの一元管理 | 新規 |
+| `frontend/src/features/curve-fitting/index.ts` | app層へ公開するfeatureの公開API | 新規 |
+| `frontend/src/features/curve-fitting/components/` | ワークベンチ、工程UI、曲線グラフ | 新規 |
+| `frontend/src/features/curve-fitting/hooks/` | 工程UIの状態選択、派生表示データ、ブラウザ操作 | 新規 |
+| `frontend/src/features/curve-fitting/lib/` | CSV、変換、硬化則、フィッティング、エクスポートの純粋処理 | 新規 |
+| `frontend/src/features/curve-fitting/store/` | Zustandによるワークフロー状態と工程別slice | 新規 |
+| `frontend/src/features/curve-fitting/types/` | カーブ、単位、材料物性、処理状態の型 | 新規 |
+| `frontend/src/features/curve-fitting/constants/` | 描画点数上限、LCINT、エクスポート点配分などの定数 | 新規 |
+| `frontend/src/features/curve-fitting/workers/` | 重いフィッティング計算とWorkerクライアント | 新規 |
+| `frontend/src/shared/components/ui/` | feature非依存のshadcn/uiプリミティブ | 新規 |
+| `frontend/src/shared/lib/` | feature非依存の汎用ユーティリティ | 新規 |
 | `frontend/src/**/*.test.ts(x)` | 数式、CSV、状態遷移、UI操作のテスト | 新規 |
 | `frontend/e2e/` | アップロードからエクスポートまでのE2Eテスト | 新規 |
 
@@ -68,8 +63,8 @@
 1. **Next.js基盤を作る**  
    TypeScript、App Router、Tailwind CSS、shadcn/ui、Lint、Formatter、Vitest、Testing Library、Playwrightを設定する。データ処理画面はクライアントコンポーネントとし、API RouteやServer ActionへCSVを渡さない。
 
-2. **ドメインモデルと状態遷移を定義する**  
-   元データ、正規化データ、変換データ、フィット結果、手動調整結果、エクスポートデータを別の型として管理する。Zustand storeを工程別sliceへ分け、前段の変更時に依存する後段結果を無効化するルールを純粋関数で実装する。
+2. **feature内のモデルと状態遷移を定義する**  
+   元データ、正規化データ、変換データ、フィット結果、手動調整結果、エクスポートデータを別の型として管理する。純粋な計算処理は `features/curve-fitting/lib`、型は `types`、Zustandは `store`へ分け、前段の変更時に依存する後段結果を無効化する。
 
 3. **CSVインポートを実装する**  
    Papa ParseをWeb Worker・チャンク処理で使用し、ブラウザ内でCSVを解析する。先頭行のプレビュー、X/Y列割り当て、応力単位、ひずみ表現、入力形式を選択できるようにする。Zodで不正行を収集し、処理を止めるエラーと継続可能な警告を分ける。
@@ -78,7 +73,7 @@
    単位正規化、工学値から真値への変換、真全ひずみから弾性ひずみを除く変換を副作用のない関数として実装する。ヤング率、降伏応力、単調性、有限値、塑性ひずみの妥当性を検証する。
 
 5. **グラフ基盤と大量データ対策を実装する**  
-   `echarts-for-react` をクライアント専用の共通グラフコンポーネントで包み、点・線、凡例、`dataZoom`、brush、パン、軸、範囲ハンドルを実装する。`option`、`onEvents`、`lazyUpdate`、`replaceMerge`、`autoResize` を共通管理し、必要な命令的操作だけ `getEchartsInstance()` 経由で行う。設定上限を超えた場合は通知し、line系列のLTTBサンプリングで表示系列だけを間引く。元データ配列は別に保持する。
+   `echarts-for-react` を `curve-fitting` feature内のグラフコンポーネントで包み、点・線、凡例、`dataZoom`、brush、パン、軸、範囲ハンドルを実装する。`option`、`onEvents`、`lazyUpdate`、`replaceMerge`、`autoResize` を共通管理し、必要な命令的操作だけ `getEchartsInstance()` 経由で行う。設定上限を超えた場合は通知し、line系列のLTTBサンプリングで表示系列だけを間引く。元データ配列は別に保持する。
 
 6. **硬化則と自動フィッティングを実装する**  
    3モデルの式と解析ヤコビアン、初期値推定、複数初期値探索、パラメータ境界、ひずみ区間均等重み、適合度を独立モジュールに分離する。`ml-levenberg-marquardt` をWeb Worker内で実行し、進行中、成功、未収束、タイムアウト、キャンセルを画面状態として扱う。
@@ -145,6 +140,8 @@
 
 ## 6. 技術選定の参考資料
 
+- [Next.js App Routerで破綻しない設計──本番で使えるアーキテクチャ実践ガイド](https://zenn.dev/yukionishi/articles/cd79e39ea6c172)
+- [Next.js: Project Structure](https://nextjs.org/docs/app/getting-started/project-structure)
 - [Next.js: Testing](https://nextjs.org/docs/app/guides/testing)
 - [Tailwind CSS: Install with Next.js](https://tailwindcss.com/docs/installation/framework-guides/nextjs)
 - [shadcn/ui: Documentation](https://ui.shadcn.com/docs)

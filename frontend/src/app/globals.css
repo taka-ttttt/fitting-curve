@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #f5f7f8;
+  --foreground: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 15% -20%, rgba(8, 145, 178, 0.12), transparent 36rem),
+    var(--background);
+  color: var(--foreground);
+  font-family: Arial, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
