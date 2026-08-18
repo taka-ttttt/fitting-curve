@@ -17,7 +17,7 @@ body {
     radial-gradient(circle at 15% -20%, rgba(8, 145, 178, 0.12), transparent 36rem),
     var(--background);
   color: var(--foreground);
-  font-family: Arial, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  font-family: var(--font-noto-sans), "Noto Sans JP", sans-serif;
 }
 
 button,

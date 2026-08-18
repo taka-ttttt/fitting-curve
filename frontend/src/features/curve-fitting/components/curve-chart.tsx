@@ -39,6 +39,8 @@ export interface CurveSeries {
   color: string;
   dashed?: boolean;
   pointsOnly?: boolean;
+  symbolSize?: number;
+  symbol?: string;
 }
 
 interface CurveChartProps {
@@ -46,7 +48,6 @@ interface CurveChartProps {
   xLabel: string;
   yLabel?: string;
   fitRange?: [number, number];
-  onFitRangeChange?: (range: [number, number]) => void;
 }
 
 export function CurveChart({
@@ -54,7 +55,6 @@ export function CurveChart({
   xLabel,
   yLabel = "真応力 [MPa]",
   fitRange,
-  onFitRangeChange,
 }: CurveChartProps) {
   const displaySeries = useMemo(
     () => series.map((item) => ({ ...item, points: decimateLttb(item.points, DISPLAY_POINT_LIMIT) })),
@@ -68,28 +68,17 @@ export function CurveChart({
       tooltip: { trigger: "axis", valueFormatter: (value) => Number(value).toPrecision(6) },
       legend: { top: 2, type: "scroll" },
       toolbox: { right: 8, feature: { dataZoom: {}, restore: {}, saveAsImage: {} } },
-      grid: { left: 70, right: 28, top: 52, bottom: fitRange ? 72 : 48 },
+      grid: { left: 70, right: 28, top: 52, bottom: 48 },
       xAxis: { type: "value", name: xLabel, nameLocation: "middle", nameGap: 30, scale: true },
       yAxis: { type: "value", name: yLabel, nameLocation: "middle", nameGap: 52, scale: true },
-      dataZoom: fitRange
-        ? [
-            { type: "inside", xAxisIndex: 0, filterMode: "none" },
-            {
-              type: "slider",
-              xAxisIndex: 0,
-              filterMode: "none",
-              startValue: fitRange[0],
-              endValue: fitRange[1],
-              bottom: 8,
-            },
-          ]
-        : [{ type: "inside", xAxisIndex: 0, filterMode: "none" }],
+      dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none" }],
       series: displaySeries.map((item, index) => ({
         name: item.name,
         type: item.pointsOnly ? "scatter" : "line",
         data: item.points.map((point) => [point.strain, point.stress]),
         showSymbol: item.pointsOnly || item.points.length < 500,
-        symbolSize: item.pointsOnly ? 5 : 3,
+        symbol: item.symbol,
+        symbolSize: item.symbolSize ?? (item.pointsOnly ? 5 : 3),
         lineStyle: item.pointsOnly ? undefined : { width: 2, type: item.dashed ? "dashed" : "solid" },
         itemStyle: { color: item.color },
         sampling: "lttb",
@@ -107,18 +96,5 @@ export function CurveChart({
     [displaySeries, fitRange, xLabel, yLabel],
   );
 
-  const onEvents = useMemo(
-    () => ({
-      datazoom: (event: { startValue?: number; endValue?: number; batch?: { startValue?: number; endValue?: number }[] }) => {
-        if (!onFitRangeChange) return;
-        const payload = event.batch?.[0] ?? event;
-        if (typeof payload.startValue === "number" && typeof payload.endValue === "number") {
-          onFitRangeChange([payload.startValue, payload.endValue]);
-        }
-      },
-    }),
-    [onFitRangeChange],
-  );
-
-  return <ReactEChartsCore echarts={echarts} option={option} onEvents={onEvents} style={{ height: 360 }} notMerge />;
+  return <ReactEChartsCore echarts={echarts} option={option} style={{ height: 360 }} notMerge />;
 }

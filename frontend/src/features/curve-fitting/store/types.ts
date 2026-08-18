@@ -3,13 +3,16 @@ import type { StateCreator } from "zustand";
 import type {
   CsvTable,
   DataMapping,
+  ConversionMethod,
   ExportResult,
   ExportSettings,
-  FitResult,
+  FitResults,
   HardeningModel,
   MaterialProperties,
   ModelParameters,
+  ModelParameterSets,
   PreparedData,
+  PreparedInputData,
 } from "@/features/curve-fitting/types/curve-fitting";
 
 export interface WorkflowSlice {
@@ -20,11 +23,14 @@ export interface WorkflowSlice {
 export interface ImportSlice {
   fileName: string | null;
   table: CsvTable | null;
+  inputData: PreparedInputData | null;
   mapping: DataMapping;
   material: MaterialProperties;
+  conversionMethod: ConversionMethod;
   setTable: (fileName: string, table: CsvTable) => void;
   updateMapping: (patch: Partial<DataMapping>) => void;
   updateMaterial: (patch: Partial<MaterialProperties>) => void;
+  setConversionMethod: (method: ConversionMethod) => void;
 }
 
 export interface ConversionSlice {
@@ -33,21 +39,25 @@ export interface ConversionSlice {
 }
 
 export interface FittingSlice {
-  model: HardeningModel;
+  selectedModels: HardeningModel[];
   fitRange: [number, number];
-  fit: FitResult | null;
-  automaticParameters: ModelParameters | null;
+  recommendedFitEnd: number;
+  fits: FitResults;
+  automaticParameters: ModelParameterSets;
   busy: boolean;
-  setModel: (model: HardeningModel) => void;
+  toggleModel: (model: HardeningModel) => void;
   setFitRange: (range: [number, number]) => void;
-  runFit: () => Promise<void>;
-  updateParameter: (name: keyof ModelParameters, value: number) => void;
-  resetParameters: () => void;
+  resetFitEnd: () => void;
+  runFits: () => Promise<void>;
+  updateParameter: (model: HardeningModel, name: keyof ModelParameters, value: number) => void;
+  resetParameters: (model: HardeningModel) => void;
 }
 
 export interface ExportSlice {
+  exportModel: HardeningModel | null;
   exportSettings: ExportSettings;
   exportResult: ExportResult | null;
+  setExportModel: (model: HardeningModel) => void;
   updateExportSettings: (patch: Partial<ExportSettings>) => void;
   createExport: () => void;
 }

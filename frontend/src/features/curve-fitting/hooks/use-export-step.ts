@@ -26,8 +26,10 @@ export function useExportStep() {
   });
   const state = useCurveWorkflowStore(
     useShallow((store) => ({
-      fit: store.fit,
+      fits: store.fits,
+      exportModel: store.exportModel,
       exportResult: store.exportResult,
+      setExportModel: store.setExportModel,
       updateExportSettings: store.updateExportSettings,
       createExport: store.createExport,
     })),

@@ -1,4 +1,5 @@
-export type InputDataKind = "engineering" | "true-total" | "true-plastic";
+export type InputDataKind = "engineering" | "true";
+export type ConversionMethod = "specified-yield" | "proof-0.2";
 export type StressUnit = "Pa" | "MPa" | "GPa";
 export type StrainUnit = "decimal" | "percent";
 export type HardeningModel = "ludwik" | "swift" | "voce";
@@ -27,10 +28,28 @@ export interface MaterialProperties {
   yieldStress: number;
 }
 
-export interface PreparedData {
+export interface PreparedInputData {
   uploaded: CurvePoint[];
-  plastic: CurvePoint[];
+  trueTotal: CurvePoint[];
+  tensileStrength: {
+    uploaded: CurvePoint;
+    trueTotal: CurvePoint;
+  };
   warnings: string[];
+}
+
+export interface PreparedData extends PreparedInputData {
+  plastic: CurvePoint[];
+  yieldPoint: {
+    sourceStrain: number;
+    sourceStress: number;
+    trueStrain: number;
+    stress: number;
+    method: ConversionMethod;
+  };
+  tensileStrength: PreparedInputData["tensileStrength"] & {
+    plastic: CurvePoint;
+  };
 }
 
 export interface ModelParameters {
@@ -55,6 +74,9 @@ export interface FitResult {
   iterations: number;
   range: [number, number];
 }
+
+export type FitResults = Partial<Record<HardeningModel, FitResult>>;
+export type ModelParameterSets = Partial<Record<HardeningModel, ModelParameters>>;
 
 export interface ExportSettings {
   maximumPlasticStrain: number;

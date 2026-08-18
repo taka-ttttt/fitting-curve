@@ -3,7 +3,6 @@
 import { FileUp } from "lucide-react";
 
 import { CurveChart } from "@/features/curve-fitting/components/curve-chart";
-import { MaterialPropertiesFields } from "@/features/curve-fitting/components/steps/material-properties-fields";
 import { DISPLAY_POINT_LIMIT } from "@/features/curve-fitting/constants/curve-fitting";
 import { useImportStep } from "@/features/curve-fitting/hooks/use-import-step";
 import { Alert } from "@/shared/components/ui/alert";
@@ -14,7 +13,7 @@ import { Label } from "@/shared/components/ui/label";
 import { Select } from "@/shared/components/ui/select";
 
 export function ImportSection() {
-  const { fileInputRef, uploadError, state, originalSeries, largeData, inputXLabel, handleFile } = useImportStep();
+  const { fileInputRef, uploadError, state, originalSeries, largeData, handleFile } = useImportStep();
 
   return (
     <Card>
@@ -26,7 +25,7 @@ export function ImportSection() {
         {uploadError && <Alert>{uploadError}</Alert>}
         {largeData && (
           <Alert>
-            {state.prepared!.uploaded.length.toLocaleString()}点のデータを読み込みました。計算には全点を使い、グラフ表示だけを最大
+            {state.inputData!.uploaded.length.toLocaleString()}点のデータを読み込みました。計算には全点を使い、グラフ表示だけを最大
             {DISPLAY_POINT_LIMIT.toLocaleString()}点に間引いています。
           </Alert>
         )}
@@ -86,8 +85,7 @@ export function ImportSection() {
                   }
                 >
                   <option value="engineering">公称応力・公称ひずみ</option>
-                  <option value="true-total">真応力・真全ひずみ</option>
-                  <option value="true-plastic">真応力・真塑性ひずみ</option>
+                  <option value="true">真応力・真ひずみ</option>
                 </Select>
               </div>
               <div className="space-y-1.5">
@@ -118,18 +116,22 @@ export function ImportSection() {
                 </Select>
               </div>
             </div>
-            <MaterialPropertiesFields />
           </>
         )}
 
-        {state.prepared && (
+        {state.inputData && (
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-800">アップロードデータ</h3>
+            <h3 className="mb-2 text-sm font-semibold text-slate-800">入力曲線</h3>
             <CurveChart
               series={originalSeries}
-              xLabel={inputXLabel}
-              yLabel={state.mapping.dataKind === "engineering" ? "公称応力 [MPa]" : "真応力 [MPa]"}
+              xLabel="ひずみ [-]"
+              yLabel="応力 [MPa]"
             />
+            <p className="mt-2 text-xs leading-5 text-slate-600">
+              {state.mapping.dataKind === "engineering"
+                ? "引張強度点は公称応力が最大となる試験点です。真応力側の対応点は、同じ試験点を公称値から真値へ変換した位置を示します。"
+                : "最大応力点は、入力された真応力が最大となる試験点です。"}
+            </p>
           </div>
         )}
       </CardContent>

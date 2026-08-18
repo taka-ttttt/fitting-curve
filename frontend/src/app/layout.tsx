@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
+import { Noto_Sans_JP } from "next/font/google";
 
 import "./globals.css";
+
+const notoSans = Noto_Sans_JP({
+  subsets: ["latin"],
+  variable: "--font-noto-sans",
+});
 
 export const metadata: Metadata = {
   title: "Material Curve Fitter",
@@ -9,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ja">
+    <html lang="ja" className={notoSans.variable}>
       <body>{children}</body>
     </html>
   );

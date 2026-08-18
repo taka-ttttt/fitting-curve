@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import type { CurveSeries } from "@/features/curve-fitting/components/curve-chart";
-import { DISPLAY_POINT_LIMIT } from "@/features/curve-fitting/constants/curve-fitting";
+import { CURVE_COLORS, DISPLAY_POINT_LIMIT } from "@/features/curve-fitting/constants/curve-fitting";
 import { parseCsvFile } from "@/features/curve-fitting/lib/csv";
 import { useCurveWorkflowStore } from "@/features/curve-fitting/store/curve-workflow-store";
 
@@ -16,8 +16,8 @@ export function useImportStep() {
     useShallow((store) => ({
       fileName: store.fileName,
       table: store.table,
+      inputData: store.inputData,
       mapping: store.mapping,
-      prepared: store.prepared,
       setTable: store.setTable,
       updateMapping: store.updateMapping,
       clearError: store.clearError,
@@ -25,25 +25,58 @@ export function useImportStep() {
   );
   const originalSeries = useMemo<CurveSeries[]>(
     () =>
-      state.prepared
+      state.inputData
         ? [
             {
-              name: "アップロードデータ",
-              points: state.prepared.uploaded,
-              color: "#64748b",
+              name: state.mapping.dataKind === "engineering" ? "公称応力–公称ひずみ" : "真応力–真ひずみ",
+              points: state.inputData.uploaded,
+              color:
+                state.mapping.dataKind === "engineering"
+                  ? CURVE_COLORS.engineering
+                  : CURVE_COLORS.trueTotal,
               pointsOnly: true,
             },
+            ...(state.mapping.dataKind === "engineering"
+              ? [
+                  {
+                    name: "真応力–真ひずみ（自動変換）",
+                    points: state.inputData.trueTotal,
+                    color: CURVE_COLORS.trueTotal,
+                    pointsOnly: true,
+                  },
+                ]
+              : []),
+            {
+              name:
+                state.mapping.dataKind === "engineering"
+                  ? "引張強度点（公称応力最大）"
+                  : "最大応力点（真応力最大）",
+              points: [state.inputData.tensileStrength.uploaded],
+              color:
+                state.mapping.dataKind === "engineering"
+                  ? CURVE_COLORS.engineering
+                  : CURVE_COLORS.trueTotal,
+              pointsOnly: true,
+              symbol: "rect",
+              symbolSize: 11,
+            },
+            ...(state.mapping.dataKind === "engineering"
+              ? [
+                  {
+                    name: "引張強度対応点（真応力）",
+                    points: [state.inputData.tensileStrength.trueTotal],
+                    color: CURVE_COLORS.trueTotal,
+                    pointsOnly: true,
+                    symbol: "rect",
+                    symbolSize: 11,
+                  },
+                ]
+              : []),
           ]
         : [],
-    [state.prepared],
+    [state.inputData, state.mapping.dataKind],
   );
-  const largeData = (state.prepared?.uploaded.length ?? 0) > DISPLAY_POINT_LIMIT;
-  const inputXLabel =
-    state.mapping.dataKind === "engineering"
-      ? "公称ひずみ [-]"
-      : state.mapping.dataKind === "true-total"
-        ? "真全ひずみ [-]"
-        : "真塑性ひずみ [-]";
+  const largeData = (state.inputData?.uploaded.length ?? 0) > DISPLAY_POINT_LIMIT;
 
   async function handleFile(file: File): Promise<void> {
     setUploadError(null);
@@ -57,5 +90,5 @@ export function useImportStep() {
     }
   }
 
-  return { fileInputRef, uploadError, state, originalSeries, largeData, inputXLabel, handleFile };
+  return { fileInputRef, uploadError, state, originalSeries, largeData, handleFile };
 }

@@ -3,11 +3,14 @@
 import { Check, Clipboard, Download } from "lucide-react";
 
 import { CurveChart } from "@/features/curve-fitting/components/curve-chart";
+import { HARDENING_MODEL_LABELS, HARDENING_MODELS } from "@/features/curve-fitting/constants/curve-fitting";
 import { useExportStep, type ExportFormValues } from "@/features/curve-fitting/hooks/use-export-step";
+import type { HardeningModel } from "@/features/curve-fitting/types/curve-fitting";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { Select } from "@/shared/components/ui/select";
 
 function formatMetric(value: number): string {
   return Number.isFinite(value) ? value.toPrecision(5) : "—";
@@ -16,7 +19,8 @@ function formatMetric(value: number): string {
 export function ExportSection() {
   const { copied, exportForm, state, exportSeries, handleExport, downloadCsv, copyLsdyna } = useExportStep();
 
-  if (!state.fit) return null;
+  const fittedModels = HARDENING_MODELS.filter((model) => Boolean(state.fits[model]));
+  if (fittedModels.length === 0 || !state.exportModel) return null;
 
   return (
     <Card>
@@ -27,6 +31,20 @@ export function ExportSection() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <div className="max-w-sm space-y-1.5">
+          <Label htmlFor="export-model">エクスポート対象硬化則</Label>
+          <Select
+            id="export-model"
+            value={state.exportModel}
+            onChange={(event) => state.setExportModel(event.target.value as HardeningModel)}
+          >
+            {fittedModels.map((model) => (
+              <option key={model} value={model}>
+                {HARDENING_MODEL_LABELS[model]}
+              </option>
+            ))}
+          </Select>
+        </div>
         <form className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" onSubmit={exportForm.handleSubmit(handleExport)}>
           {[
             {
