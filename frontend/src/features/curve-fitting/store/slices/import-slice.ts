@@ -15,8 +15,7 @@ export const createImportSlice: CurveWorkflowSlice<ImportSlice> = (set) => ({
   table: null,
   inputData: null,
   mapping: initialMapping,
-  material: { youngsModulus: 210_000, yieldStress: 300 },
-  conversionMethod: "specified-yield",
+  material: { youngsModulus: 210_000 },
   setTable: (fileName, table) => {
     const mapping = {
       ...initialMapping,
@@ -30,6 +29,7 @@ export const createImportSlice: CurveWorkflowSlice<ImportSlice> = (set) => ({
         mapping,
         inputData: prepareInputData(table, mapping),
         prepared: null,
+        proportionalLimitConfirmed: false,
         fits: {},
         automaticParameters: {},
         exportModel: null,
@@ -43,6 +43,7 @@ export const createImportSlice: CurveWorkflowSlice<ImportSlice> = (set) => ({
         mapping,
         inputData: null,
         prepared: null,
+        proportionalLimitConfirmed: false,
         fits: {},
         automaticParameters: {},
         exportModel: null,
@@ -59,6 +60,7 @@ export const createImportSlice: CurveWorkflowSlice<ImportSlice> = (set) => ({
           mapping,
           inputData: state.table ? prepareInputData(state.table, mapping) : null,
           prepared: null,
+          proportionalLimitConfirmed: false,
           fits: {},
           automaticParameters: {},
           exportModel: null,
@@ -70,6 +72,7 @@ export const createImportSlice: CurveWorkflowSlice<ImportSlice> = (set) => ({
           mapping,
           inputData: null,
           prepared: null,
+          proportionalLimitConfirmed: false,
           fits: {},
           automaticParameters: {},
           exportModel: null,
@@ -82,30 +85,18 @@ export const createImportSlice: CurveWorkflowSlice<ImportSlice> = (set) => ({
     set((state) => {
       const material = { ...state.material, ...patch };
       const affectsConversion =
-        (state.conversionMethod === "specified-yield" &&
-          patch.yieldStress !== undefined &&
-          patch.yieldStress !== state.material.yieldStress) ||
-        (state.conversionMethod === "proof-0.2" &&
-          patch.youngsModulus !== undefined &&
-          patch.youngsModulus !== state.material.youngsModulus);
+        state.mapping.dataKind !== "true-plastic" &&
+        patch.youngsModulus !== undefined &&
+        patch.youngsModulus !== state.material.youngsModulus;
       if (!affectsConversion) return { material };
       return {
         material,
         prepared: null,
+        proportionalLimitConfirmed: false,
         fits: {},
         automaticParameters: {},
         exportModel: null,
         exportResult: null,
       };
-    }),
-  setConversionMethod: (conversionMethod) =>
-    set({
-      conversionMethod,
-      prepared: null,
-      fits: {},
-      automaticParameters: {},
-      exportModel: null,
-      exportResult: null,
-      error: null,
     }),
 });

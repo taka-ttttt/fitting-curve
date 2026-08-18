@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { RotateCcw, WandSparkles } from "lucide-react";
 
 import { CurveChart } from "@/features/curve-fitting/components/curve-chart";
@@ -36,7 +37,7 @@ const PARAMETER_FIELDS: Record<
       min: 1e-7,
       step: 0.0001,
       description:
-        "降伏直後の加工硬化挙動を表す塑性ひずみオフセット（等価的・仮想的な予ひずみ）です。直接測定する単純な物性値ではなく、弾性降伏ひずみ σy/E とは別物なので、降伏応力時のひずみをそのまま入力するパラメータではありません。",
+        "加工硬化挙動を表す塑性ひずみオフセット（等価的・仮想的な予ひずみ）です。比例限度ひずみやσ0/Eとは別物です。",
     },
     {
       key: "n",
@@ -52,7 +53,7 @@ const PARAMETER_FIELDS: Record<
       label: "Q [MPa]",
       min: 0,
       step: 1,
-      description: "降伏応力から飽和応力までの応力増分です。飽和応力はσy+Qです。",
+      description: "比例限度応力から基底式の飽和応力までの応力増分です。",
     },
     {
       key: "b",
@@ -66,17 +67,17 @@ const PARAMETER_FIELDS: Record<
 
 const MODEL_DETAILS: Record<HardeningModel, { formula: string; description: string }> = {
   ludwik: {
-    formula: "σ = σy + K εₚⁿ",
-    description: "σyは基準応力、εₚは真塑性ひずみ、Kは強度係数、nは加工硬化指数です。",
+    formula: "f(εₚ) = σ₀ + K εₚⁿ",
+    description: "σ₀は比例限度応力です。接続後は σ=σⱼ+f(εₚ)−f(εⱼ) を使用します。",
   },
   swift: {
-    formula: "σ = K(ε₀ + εₚ)ⁿ = σy(1 + εₚ / ε₀)ⁿ",
+    formula: "f(εₚ) = K(ε₀ + εₚ)ⁿ = σ₀(1 + εₚ / ε₀)ⁿ",
     description:
-      "ε₀は降伏直後の曲率を表す等価的・仮想的な予ひずみであり、弾性降伏ひずみσy/Eではありません。本実装ではσ(0)=σyの拘束からKを算出します。",
+      "ε₀は等価的な予ひずみです。f(0)=σ₀からKを算出し、接続後は差分で連続化します。",
   },
   voce: {
-    formula: "σ = σy + Q[1 − exp(−bεₚ)]",
-    description: "Qは飽和までの応力増分、bは飽和速度、σyは基準応力、εₚは真塑性ひずみです。",
+    formula: "f(εₚ) = σ₀ + Q[1 − exp(−bεₚ)]",
+    description: "Qは飽和までの応力増分、bは飽和速度です。接続後は差分で連続化します。",
   },
 };
 
@@ -86,15 +87,16 @@ function formatMetric(value: number): string {
 
 export function FittingSection() {
   const { state, fittedSeries, fitRangeError } = useFittingStep();
+  const [graphRangeTarget, setGraphRangeTarget] = useState<"start" | "connection">("connection");
 
-  if (!state.prepared) return null;
+  if (!state.prepared || !state.proportionalLimitConfirmed) return null;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>3. 硬化則のフィッティング</CardTitle>
         <CardDescription>
-          選択したすべての硬化則を同じ塑性ひずみ範囲で計算し、同じグラフ上で比較します。
+          フィッティング始点から接続点までで硬化則を同定し、接続点までは実測、以降は接続補正後の硬化則を使用します。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -118,7 +120,7 @@ export function FittingSection() {
           </fieldset>
           <NumberField
             id="fit-start"
-            label="開始塑性ひずみ"
+            label="フィッティング始点"
             value={state.fitRange[0]}
             min={0}
             step={0.01}
@@ -128,12 +130,12 @@ export function FittingSection() {
           <div>
             <NumberField
               id="fit-end"
-              label="終了塑性ひずみ"
+              label="実測・硬化則接続点"
               value={state.fitRange[1]}
               min={0}
               step={0.01}
               disabled={state.busy}
-              description="引張強度点は公称応力が最大となり、くびれ（ネッキング）が始まる目安です。一様変形範囲を対象にするため、その直前を初期終了値にしています。"
+              description="既定値は工学応力最大点です。ここまでは実測を保持し、以降を硬化則へ接続します。"
               onChange={(value) => state.setFitRange([state.fitRange[0], value])}
             />
             <Button
@@ -143,7 +145,7 @@ export function FittingSection() {
               disabled={state.busy}
               onClick={state.resetFitEnd}
             >
-              <RotateCcw className="size-3.5" /> 初期終了値に戻す
+              <RotateCcw className="size-3.5" /> 推奨接続点に戻す
             </Button>
           </div>
           <div className="flex items-end pb-10">
@@ -159,7 +161,37 @@ export function FittingSection() {
 
         {fitRangeError && <p className="text-sm text-red-700">{fitRangeError}</p>}
 
-        <CurveChart series={fittedSeries} xLabel="真塑性ひずみ [-]" fitRange={state.fitRange} />
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <span>グラフ上の点をクリックして調整:</span>
+          <Button
+            type="button"
+            size="sm"
+            variant={graphRangeTarget === "start" ? "default" : "outline"}
+            onClick={() => setGraphRangeTarget("start")}
+          >
+            フィッティング始点
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={graphRangeTarget === "connection" ? "default" : "outline"}
+            onClick={() => setGraphRangeTarget("connection")}
+          >
+            接続点
+          </Button>
+        </div>
+        <CurveChart
+          series={fittedSeries}
+          xLabel="真塑性ひずみ [-]"
+          fitRange={state.fitRange}
+          onPointSelect={(strain) =>
+            state.setFitRange(
+              graphRangeTarget === "start"
+                ? [strain, state.fitRange[1]]
+                : [state.fitRange[0], strain],
+            )
+          }
+        />
 
         <div className="grid gap-4 xl:grid-cols-3">
           {state.selectedModels.map((model) => {
@@ -203,10 +235,18 @@ export function FittingSection() {
                     </div>
                     {model === "swift" && (
                       <p className="mt-3 text-xs text-slate-600">
-                        拘束条件 σ(0)=σy より、K ={" "}
-                        {formatMetric(deriveSwiftK(state.prepared!.yieldPoint.stress, fit.parameters))} MPa
+                        拘束条件 f(0)=σ₀ より、K ={" "}
+                        {formatMetric(deriveSwiftK(state.prepared!.proportionalLimit.stress, fit.parameters))} MPa
                       </p>
                     )}
+                    <div className="mt-3 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                      <p>接続応力: {formatMetric(fit.connection.stress)} MPa</p>
+                      <p>左接線係数: {formatMetric(fit.diagnostics.leftTangent)} MPa</p>
+                      <p>右接線係数: {formatMetric(fit.diagnostics.rightTangent)} MPa</p>
+                      {fit.diagnostics.exportBlocked && (
+                        <p className="mt-1 font-semibold text-red-700">接続部が非物理的なためエクスポートできません。</p>
+                      )}
+                    </div>
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       {[
                         ["RMSE [MPa]", fit.metrics.rmse],

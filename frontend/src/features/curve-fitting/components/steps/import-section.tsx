@@ -85,7 +85,8 @@ export function ImportSection() {
                   }
                 >
                   <option value="engineering">公称応力・公称ひずみ</option>
-                  <option value="true">真応力・真ひずみ</option>
+                  <option value="true-total">真応力・真全ひずみ</option>
+                  <option value="true-plastic">真応力・真塑性ひずみ</option>
                 </Select>
               </div>
               <div className="space-y-1.5">
@@ -130,7 +131,9 @@ export function ImportSection() {
             <p className="mt-2 text-xs leading-5 text-slate-600">
               {state.mapping.dataKind === "engineering"
                 ? "引張強度点は公称応力が最大となる試験点です。真応力側の対応点は、同じ試験点を公称値から真値へ変換した位置を示します。"
-                : "最大応力点は、入力された真応力が最大となる試験点です。"}
+                : state.mapping.dataKind === "true-total"
+                  ? "一様変形を仮定して工学値へ逆変換し、工学応力最大点をネッキング開始候補として扱います。"
+                  : "先頭点の真塑性ひずみは0である必要があります。比例限度と0.2%耐力の自動算出は行いません。"}
             </p>
           </div>
         )}

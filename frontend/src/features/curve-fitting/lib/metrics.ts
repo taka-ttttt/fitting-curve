@@ -1,11 +1,18 @@
-import { evaluateModel } from "./models";
-import type { CurvePoint, FitMetrics, HardeningModel, ModelParameters } from "../types/curve-fitting";
+import { evaluateConnectedModel } from "./hybrid-curve";
+import type {
+  CurveConnection,
+  CurvePoint,
+  FitMetrics,
+  HardeningModel,
+  ModelParameters,
+} from "../types/curve-fitting";
 
 export function calculateMetrics(
   points: CurvePoint[],
   model: HardeningModel,
-  yieldStress: number,
+  initialStress: number,
   parameters: ModelParameters,
+  connection: CurveConnection,
 ): FitMetrics {
   if (points.length === 0) {
     return { rmse: 0, normalizedRmse: 0, rSquared: 0, maxAbsoluteError: 0 };
@@ -15,7 +22,9 @@ export function calculateMetrics(
   let totalVariation = 0;
   let maxAbsoluteError = 0;
   for (const point of points) {
-    const residual = point.stress - evaluateModel(model, point.strain, yieldStress, parameters);
+    const residual =
+      point.stress -
+      evaluateConnectedModel(model, point.strain, initialStress, parameters, connection);
     squaredError += residual * residual;
     totalVariation += (point.stress - mean) ** 2;
     maxAbsoluteError = Math.max(maxAbsoluteError, Math.abs(residual));

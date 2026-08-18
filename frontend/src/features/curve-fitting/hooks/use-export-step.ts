@@ -7,6 +7,7 @@ import { useShallow } from "zustand/react/shallow";
 import { z } from "zod";
 
 import type { CurveSeries } from "@/features/curve-fitting/components/curve-chart";
+import { CURVE_COLORS } from "@/features/curve-fitting/constants/curve-fitting";
 import { useCurveWorkflowStore } from "@/features/curve-fitting/store/curve-workflow-store";
 
 const exportSchema = z.object({
@@ -27,6 +28,7 @@ export function useExportStep() {
   const state = useCurveWorkflowStore(
     useShallow((store) => ({
       fits: store.fits,
+      prepared: store.prepared,
       exportModel: store.exportModel,
       exportResult: store.exportResult,
       setExportModel: store.setExportModel,
@@ -35,19 +37,56 @@ export function useExportStep() {
     })),
   );
   const exportSeries = useMemo<CurveSeries[]>(
-    () =>
-      state.exportResult
-        ? [
-            { name: "エクスポート曲線", points: state.exportResult.points, color: "#0f766e" },
+    () => {
+      if (!state.exportResult || !state.exportModel || !state.prepared) return [];
+      const fit = state.fits[state.exportModel];
+      if (!fit) return [];
+      const measuredEnd = state.prepared.plastic.at(-1)!.strain;
+      const measuredPoints = state.exportResult.points.filter(
+        (point) => point.strain <= fit.connection.strain,
+      );
+      const modelPoints = state.exportResult.points.filter(
+        (point) => point.strain >= fit.connection.strain && point.strain <= measuredEnd,
+      );
+      const extrapolatedTail = state.exportResult.points.filter((point) => point.strain > measuredEnd);
+      const extrapolatedPoints = modelPoints.at(-1)
+        ? [modelPoints.at(-1)!, ...extrapolatedTail]
+        : extrapolatedTail;
+      return [
+        { name: "実測保持区間", points: measuredPoints, color: CURVE_COLORS.plastic },
+        {
+          name: "硬化則区間",
+          points: modelPoints,
+          color: CURVE_COLORS[state.exportModel],
+          dashed: true,
+        },
+        ...(extrapolatedPoints.length > 1
+          ? [
             {
-              name: "LCINT=1001 内部曲線",
-              points: state.exportResult.lcintPoints,
-              color: "#f97316",
+              name: "硬化則外挿区間",
+              points: extrapolatedPoints,
+              color: CURVE_COLORS.connection,
               dashed: true,
             },
           ]
-        : [],
-    [state.exportResult],
+          : []),
+        {
+          name: "LCINT=1001 内部曲線",
+          points: state.exportResult.lcintPoints,
+          color: CURVE_COLORS.reference,
+          dashed: true,
+        },
+        {
+          name: "接続点",
+          points: [fit.connection],
+          color: CURVE_COLORS.connection,
+          pointsOnly: true,
+          symbol: "diamond",
+          symbolSize: 12,
+        },
+      ];
+    },
+    [state.exportModel, state.exportResult, state.fits, state.prepared],
   );
 
   function handleExport(values: ExportFormValues): void {

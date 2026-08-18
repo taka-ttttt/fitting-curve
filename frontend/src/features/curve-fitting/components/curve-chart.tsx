@@ -48,6 +48,7 @@ interface CurveChartProps {
   xLabel: string;
   yLabel?: string;
   fitRange?: [number, number];
+  onPointSelect?: (strain: number) => void;
 }
 
 export function CurveChart({
@@ -55,6 +56,7 @@ export function CurveChart({
   xLabel,
   yLabel = "真応力 [MPa]",
   fitRange,
+  onPointSelect,
 }: CurveChartProps) {
   const displaySeries = useMemo(
     () => series.map((item) => ({ ...item, points: decimateLttb(item.points, DISPLAY_POINT_LIMIT) })),
@@ -96,5 +98,27 @@ export function CurveChart({
     [displaySeries, fitRange, xLabel, yLabel],
   );
 
-  return <ReactEChartsCore echarts={echarts} option={option} style={{ height: 360 }} notMerge />;
+  const onEvents = useMemo(
+    () =>
+      onPointSelect
+        ? {
+            click: (event: { value?: unknown }) => {
+              if (!Array.isArray(event.value)) return;
+              const strain = Number(event.value[0]);
+              if (Number.isFinite(strain)) onPointSelect(strain);
+            },
+          }
+        : undefined,
+    [onPointSelect],
+  );
+
+  return (
+    <ReactEChartsCore
+      echarts={echarts}
+      option={option}
+      style={{ height: 360 }}
+      notMerge
+      onEvents={onEvents}
+    />
+  );
 }

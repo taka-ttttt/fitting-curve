@@ -1,7 +1,18 @@
 import { levenbergMarquardt, type JacobianFunction, type ParameterizedFunction } from "ml-levenberg-marquardt";
 
+import {
+  calculateConnectionDiagnostics,
+  createConnection,
+  evaluateConnectedModel,
+} from "./hybrid-curve";
 import { calculateMetrics } from "./metrics";
-import type { CurvePoint, FitResult, HardeningModel, ModelParameters } from "../types/curve-fitting";
+import type {
+  CurveConnection,
+  CurvePoint,
+  FitResult,
+  HardeningModel,
+  ModelParameters,
+} from "../types/curve-fitting";
 
 interface ModelDefinition {
   fn: ParameterizedFunction;
@@ -25,38 +36,54 @@ function intervalUncertainties(points: CurvePoint[]): number[] {
   return widths.map((width) => 1 / Math.sqrt(width / mean));
 }
 
-function createDefinition(model: HardeningModel, yieldStress: number): ModelDefinition {
+function subtractAtConnection(
+  derivative: (strain: number) => number[],
+  connection: CurveConnection,
+): (strain: number) => number[] {
+  const connected = derivative(connection.strain);
+  return (strain) => derivative(strain).map((value, index) => value - connected[index]);
+}
+
+function createDefinition(
+  model: HardeningModel,
+  initialStress: number,
+  connection: CurveConnection,
+): ModelDefinition {
   switch (model) {
-    case "ludwik":
+    case "ludwik": {
+      const baseDerivative = ([K, n]: number[]) => (x: number) => {
+        const strain = Math.max(0, x);
+        const power = strain ** n;
+        return [power, strain === 0 ? 0 : K * power * Math.log(strain)];
+      };
       return {
-        fn: ([K, n]) => (x) => yieldStress + K * Math.max(0, x) ** n,
-        jacobian: ([K, n]) => (x) => {
-          const strain = Math.max(0, x);
-          const power = strain ** n;
-          return [power, strain === 0 ? 0 : K * power * Math.log(strain)];
-        },
+        fn: ([K, n]) => (x) =>
+          evaluateConnectedModel("ludwik", x, initialStress, { K, n }, connection),
+        jacobian: (values) => subtractAtConnection(baseDerivative(values), connection),
         starts: [
-          [yieldStress, 0.2],
-          [yieldStress * 2, 0.35],
-          [yieldStress * 0.5, 0.1],
+          [initialStress, 0.2],
+          [initialStress * 2, 0.35],
+          [initialStress * 0.5, 0.1],
         ],
         min: [0, 0.001],
-        max: [yieldStress * 100, 2],
+        max: [initialStress * 100, 2],
         toParameters: ([K, n]) => ({ K, n }),
       };
-    case "swift":
+    }
+    case "swift": {
+      const baseDerivative = ([epsilon0, n]: number[]) => (x: number) => {
+        const strain = Math.max(0, x);
+        const ratio = 1 + strain / epsilon0;
+        const value = initialStress * ratio ** n;
+        return [
+          -value * n * strain / (epsilon0 * (epsilon0 + strain)),
+          value * Math.log(ratio),
+        ];
+      };
       return {
         fn: ([epsilon0, n]) => (x) =>
-          yieldStress * (1 + Math.max(0, x) / epsilon0) ** n,
-        jacobian: ([epsilon0, n]) => (x) => {
-          const strain = Math.max(0, x);
-          const ratio = 1 + strain / epsilon0;
-          const value = yieldStress * ratio ** n;
-          return [
-            -value * n * strain / (epsilon0 * (epsilon0 + strain)),
-            value * Math.log(ratio),
-          ];
-        },
+          evaluateConnectedModel("swift", x, initialStress, { epsilon0, n }, connection),
+        jacobian: (values) => subtractAtConnection(baseDerivative(values), connection),
         starts: [
           [0.01, 0.2],
           [0.002, 0.12],
@@ -66,24 +93,27 @@ function createDefinition(model: HardeningModel, yieldStress: number): ModelDefi
         max: [2, 2],
         toParameters: ([epsilon0, n]) => ({ epsilon0, n }),
       };
-    case "voce":
+    }
+    case "voce": {
+      const baseDerivative = ([Q, b]: number[]) => (x: number) => {
+        const strain = Math.max(0, x);
+        const exponential = Math.exp(-b * strain);
+        return [1 - exponential, Q * strain * exponential];
+      };
       return {
         fn: ([Q, b]) => (x) =>
-          yieldStress + Q * (1 - Math.exp(-b * Math.max(0, x))),
-        jacobian: ([Q, b]) => (x) => {
-          const strain = Math.max(0, x);
-          const exponential = Math.exp(-b * strain);
-          return [1 - exponential, Q * strain * exponential];
-        },
+          evaluateConnectedModel("voce", x, initialStress, { Q, b }, connection),
+        jacobian: (values) => subtractAtConnection(baseDerivative(values), connection),
         starts: [
-          [yieldStress, 10],
-          [yieldStress * 2, 4],
-          [yieldStress * 0.5, 30],
+          [initialStress, 10],
+          [initialStress * 2, 4],
+          [initialStress * 0.5, 30],
         ],
         min: [0, 0.001],
-        max: [yieldStress * 100, 10_000],
+        max: [initialStress * 100, 10_000],
         toParameters: ([Q, b]) => ({ Q, b }),
       };
+    }
   }
 }
 
@@ -91,14 +121,15 @@ function createDefinition(model: HardeningModel, yieldStress: number): ModelDefi
 export function fitHardeningModel(
   allPoints: CurvePoint[],
   model: HardeningModel,
-  yieldStress: number,
+  initialStress: number,
   range: [number, number],
 ): FitResult {
   const points = allPoints.filter(
     (point) => point.strain >= range[0] && point.strain <= range[1] && point.strain >= 0,
   );
   if (points.length < 3) throw new Error("フィッティング範囲内に3点以上必要です。");
-  const definition = createDefinition(model, yieldStress);
+  const connection = createConnection(allPoints, range[1]);
+  const definition = createDefinition(model, initialStress, connection);
   const data = { x: points.map((point) => point.strain), y: points.map((point) => point.stress) };
   const weights = intervalUncertainties(points);
   let best: ReturnType<typeof levenbergMarquardt> | null = null;
@@ -127,8 +158,16 @@ export function fitHardeningModel(
   return {
     model,
     parameters,
-    metrics: calculateMetrics(points, model, yieldStress, parameters),
+    metrics: calculateMetrics(points, model, initialStress, parameters, connection),
     iterations: best.iterations,
     range,
+    connection,
+    diagnostics: calculateConnectionDiagnostics(
+      allPoints,
+      model,
+      initialStress,
+      parameters,
+      connection,
+    ),
   };
 }

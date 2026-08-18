@@ -23,59 +23,55 @@ export function useImportStep() {
       clearError: store.clearError,
     })),
   );
-  const originalSeries = useMemo<CurveSeries[]>(
-    () =>
-      state.inputData
-        ? [
-            {
-              name: state.mapping.dataKind === "engineering" ? "公称応力–公称ひずみ" : "真応力–真ひずみ",
-              points: state.inputData.uploaded,
-              color:
-                state.mapping.dataKind === "engineering"
-                  ? CURVE_COLORS.engineering
-                  : CURVE_COLORS.trueTotal,
-              pointsOnly: true,
-            },
-            ...(state.mapping.dataKind === "engineering"
-              ? [
-                  {
-                    name: "真応力–真ひずみ（自動変換）",
-                    points: state.inputData.trueTotal,
-                    color: CURVE_COLORS.trueTotal,
-                    pointsOnly: true,
-                  },
-                ]
-              : []),
-            {
-              name:
-                state.mapping.dataKind === "engineering"
-                  ? "引張強度点（公称応力最大）"
-                  : "最大応力点（真応力最大）",
-              points: [state.inputData.tensileStrength.uploaded],
-              color:
-                state.mapping.dataKind === "engineering"
-                  ? CURVE_COLORS.engineering
-                  : CURVE_COLORS.trueTotal,
-              pointsOnly: true,
-              symbol: "rect",
-              symbolSize: 11,
-            },
-            ...(state.mapping.dataKind === "engineering"
-              ? [
-                  {
-                    name: "引張強度対応点（真応力）",
-                    points: [state.inputData.tensileStrength.trueTotal],
-                    color: CURVE_COLORS.trueTotal,
-                    pointsOnly: true,
-                    symbol: "rect",
-                    symbolSize: 11,
-                  },
-                ]
-              : []),
-          ]
-        : [],
-    [state.inputData, state.mapping.dataKind],
-  );
+  const originalSeries = useMemo<CurveSeries[]>(() => {
+    if (!state.inputData) return [];
+    const inputName =
+      state.mapping.dataKind === "engineering"
+        ? "公称応力–公称ひずみ"
+        : state.mapping.dataKind === "true-total"
+          ? "真応力–真全ひずみ"
+          : "真応力–真塑性ひずみ";
+    const inputColor =
+      state.mapping.dataKind === "engineering" ? CURVE_COLORS.engineering : CURVE_COLORS.trueTotal;
+    const series: CurveSeries[] = [
+      {
+        name: inputName,
+        points: state.inputData.uploaded,
+        color: inputColor,
+        pointsOnly: true,
+      },
+      {
+        name:
+          state.mapping.dataKind === "engineering"
+            ? "引張強度点（公称応力最大）"
+            : "最大応力点",
+        points: [state.inputData.tensileStrength.uploaded],
+        color: inputColor,
+        pointsOnly: true,
+        symbol: "rect",
+        symbolSize: 11,
+      },
+    ];
+    if (state.mapping.dataKind === "engineering" && state.inputData.trueTotal) {
+      series.push({
+        name: "真応力–真全ひずみ（自動変換）",
+        points: state.inputData.trueTotal,
+        color: CURVE_COLORS.trueTotal,
+        pointsOnly: true,
+      });
+      if (state.inputData.tensileStrength.trueTotal) {
+        series.push({
+          name: "引張強度対応点（真応力）",
+          points: [state.inputData.tensileStrength.trueTotal],
+          color: CURVE_COLORS.trueTotal,
+          pointsOnly: true,
+          symbol: "rect",
+          symbolSize: 11,
+        });
+      }
+    }
+    return series;
+  }, [state.inputData, state.mapping.dataKind]);
   const largeData = (state.inputData?.uploaded.length ?? 0) > DISPLAY_POINT_LIMIT;
 
   async function handleFile(file: File): Promise<void> {

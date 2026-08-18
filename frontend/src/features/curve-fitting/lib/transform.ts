@@ -1,15 +1,20 @@
+import {
+  CURVE_POINT_TOLERANCE,
+  PROPORTIONAL_LIMIT_CONSECUTIVE_POINTS,
+  PROPORTIONAL_LIMIT_PLASTIC_STRAIN_THRESHOLD,
+} from "../constants/curve-fitting";
 import type {
   CurvePoint,
-  ConversionMethod,
   CsvTable,
   DataMapping,
   MaterialProperties,
   PreparedData,
   PreparedInputData,
+  ProofStressPoint,
+  ProportionalLimitPoint,
 } from "../types/curve-fitting";
 
 const STRESS_TO_MPA = { Pa: 1e-6, MPa: 1, GPa: 1e3 } as const;
-const YIELD_POINT_TOLERANCE = 1e-10;
 
 function toFiniteNumber(value: string): number | null {
   const normalized = value.trim().replace(/,/g, "");
@@ -18,17 +23,19 @@ function toFiniteNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-interface NormalizedPointPair {
+interface NormalizedPointSet {
   uploaded: CurvePoint;
-  trueTotal: CurvePoint;
+  engineering: CurvePoint | null;
+  trueTotal: CurvePoint | null;
+  directPlastic: CurvePoint | null;
 }
 
 function normalizeRows(table: CsvTable, mapping: DataMapping): {
-  pairs: NormalizedPointPair[];
+  pointSets: NormalizedPointSet[];
   warnings: string[];
 } {
   const warnings = [...table.warnings];
-  const pairs: NormalizedPointPair[] = [];
+  const pointSets: NormalizedPointSet[] = [];
   let invalidCount = 0;
 
   table.rows.forEach((row) => {
@@ -45,146 +52,245 @@ function normalizeRows(table: CsvTable, mapping: DataMapping): {
       return;
     }
     const uploaded = { strain, stress };
-    const trueTotal =
-      mapping.dataKind === "engineering"
-        ? { strain: Math.log1p(strain), stress: stress * (1 + strain) }
-        : { strain, stress };
-    pairs.push({ uploaded, trueTotal });
+    if (mapping.dataKind === "engineering") {
+      pointSets.push({
+        uploaded,
+        engineering: uploaded,
+        trueTotal: { strain: Math.log1p(strain), stress: stress * (1 + strain) },
+        directPlastic: null,
+      });
+      return;
+    }
+    if (mapping.dataKind === "true-total") {
+      const stretch = Math.exp(strain);
+      pointSets.push({
+        uploaded,
+        engineering: { strain: stretch - 1, stress: stress / stretch },
+        trueTotal: uploaded,
+        directPlastic: null,
+      });
+      return;
+    }
+    pointSets.push({ uploaded, engineering: null, trueTotal: null, directPlastic: uploaded });
   });
 
   if (invalidCount) warnings.push(`${invalidCount}行の非数値または無効なデータを除外しました。`);
-  if (pairs.length < 3) throw new Error("有効なデータ点が3点以上必要です。");
-  return { pairs, warnings };
+  if (pointSets.length < 3) throw new Error("有効なデータ点が3点以上必要です。");
+  pointSets.sort((left, right) => left.uploaded.strain - right.uploaded.strain);
+  return { pointSets, warnings };
 }
 
-/** Maps CSV columns and normalizes the input to MPa/decimal and true total values. */
+/** Maps CSV columns and normalizes the input to MPa and decimal strain. */
 export function prepareInputData(table: CsvTable, mapping: DataMapping): PreparedInputData {
-  const { pairs, warnings } = normalizeRows(table, mapping);
-  const tensileStrengthPair = pairs.reduce((maximum, pair) =>
-    pair.uploaded.stress > maximum.uploaded.stress ? pair : maximum,
-  );
-  const uploaded = pairs.map((pair) => pair.uploaded).sort((a, b) => a.strain - b.strain);
-  const trueTotal = pairs.map((pair) => pair.trueTotal).sort((a, b) => a.strain - b.strain);
-
+  const { pointSets, warnings } = normalizeRows(table, mapping);
+  const tensileStrengthSet = pointSets.reduce((maximum, pointSet) => {
+    const pointStress = pointSet.engineering?.stress ?? pointSet.uploaded.stress;
+    const maximumStress = maximum.engineering?.stress ?? maximum.uploaded.stress;
+    return pointStress > maximumStress ? pointSet : maximum;
+  });
   return {
-    uploaded,
-    trueTotal,
+    dataKind: mapping.dataKind,
+    uploaded: pointSets.map((pointSet) => pointSet.uploaded),
+    engineering:
+      mapping.dataKind === "true-plastic"
+        ? null
+        : pointSets.map((pointSet) => pointSet.engineering as CurvePoint),
+    trueTotal:
+      mapping.dataKind === "true-plastic"
+        ? null
+        : pointSets.map((pointSet) => pointSet.trueTotal as CurvePoint),
+    directPlastic:
+      mapping.dataKind === "true-plastic"
+        ? pointSets.map((pointSet) => pointSet.directPlastic as CurvePoint)
+        : null,
     tensileStrength: {
-      uploaded: tensileStrengthPair.uploaded,
-      trueTotal: tensileStrengthPair.trueTotal,
+      uploaded: tensileStrengthSet.uploaded,
+      engineering: tensileStrengthSet.engineering,
+      trueTotal: tensileStrengthSet.trueTotal,
     },
     warnings,
   };
 }
 
-interface YieldPoint {
-  sourceStrain: number;
-  sourceStress: number;
-  trueStrain: number;
-  stress: number;
-}
-
-function interpolateSpecifiedYieldPoint(points: CurvePoint[], yieldStress: number): YieldPoint {
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1];
-    const current = points[index];
-    if (previous.stress <= yieldStress && current.stress >= yieldStress) {
-      const stressDifference = current.stress - previous.stress;
-      if (stressDifference === 0) {
-        return {
-          sourceStrain: previous.strain,
-          sourceStress: yieldStress,
-          trueStrain: previous.strain,
-          stress: yieldStress,
-        };
-      }
-      const ratio = (yieldStress - previous.stress) / stressDifference;
-      const trueStrain = previous.strain + ratio * (current.strain - previous.strain);
-      return {
-        sourceStrain: trueStrain,
-        sourceStress: yieldStress,
-        trueStrain,
-        stress: yieldStress,
-      };
-    }
+function interpolatePoint(points: CurvePoint[], strain: number): CurvePoint {
+  if (strain < points[0].strain || strain > points.at(-1)!.strain) {
+    throw new Error("指定した比例限度ひずみは入力曲線の範囲内にしてください。");
   }
-  throw new Error("降伏応力は、入力曲線が上昇中に通過する応力範囲内で指定してください。");
+  const exact = points.find((point) => Math.abs(point.strain - strain) <= CURVE_POINT_TOLERANCE);
+  if (exact) return { ...exact };
+  const rightIndex = points.findIndex((point) => point.strain > strain);
+  const left = points[rightIndex - 1];
+  const right = points[rightIndex];
+  const ratio = (strain - left.strain) / (right.strain - left.strain);
+  return { strain, stress: left.stress + ratio * (right.stress - left.stress) };
 }
 
-function interpolateProofStressPoint(
+function interpolateRawPlastic(
+  trueTotal: CurvePoint[],
+  rawPlastic: CurvePoint[],
+  trueStrain: number,
+): ProportionalLimitPoint {
+  const stressPoint = interpolatePoint(trueTotal, trueStrain);
+  const rawPoint = interpolatePoint(rawPlastic, trueStrain);
+  return {
+    trueStrain,
+    rawPlasticStrain: rawPoint.stress,
+    stress: stressPoint.stress,
+    method: "manual",
+  };
+}
+
+function detectProportionalLimit(
+  trueTotal: CurvePoint[],
+  rawPlastic: CurvePoint[],
+): ProportionalLimitPoint {
+  const threshold = PROPORTIONAL_LIMIT_PLASTIC_STRAIN_THRESHOLD;
+  const runLength = PROPORTIONAL_LIMIT_CONSECUTIVE_POINTS;
+  for (let index = 0; index <= rawPlastic.length - runLength; index += 1) {
+    const sustained = rawPlastic
+      .slice(index, index + runLength)
+      .every((point) => point.stress >= threshold);
+    if (!sustained) continue;
+    let leftIndex = index - 1;
+    while (leftIndex >= 0 && rawPlastic[leftIndex].stress >= threshold) leftIndex -= 1;
+    if (leftIndex < 0) {
+      throw new Error("比例限度候補の前に判定しきい値未満の点がありません。");
+    }
+    const left = rawPlastic[leftIndex];
+    const right = rawPlastic[index];
+    const denominator = right.stress - left.stress;
+    const ratio = denominator === 0 ? 1 : (threshold - left.stress) / denominator;
+    const trueStrain = left.strain + ratio * (right.strain - left.strain);
+    return {
+      trueStrain,
+      rawPlasticStrain: threshold,
+      stress: interpolatePoint(trueTotal, trueStrain).stress,
+      method: "automatic",
+    };
+  }
+  throw new Error(
+    `真塑性ひずみ残差が${threshold}以上となる状態を${runLength}点連続で検出できませんでした。`,
+  );
+}
+
+function calculateProofStress(
   input: PreparedInputData,
   youngsModulus: number,
-): YieldPoint {
-  if (!(youngsModulus > 0)) throw new Error("0.2%耐力方式ではヤング率を0より大きくしてください。");
+  proportionalLimit: ProportionalLimitPoint,
+): ProofStressPoint | null {
+  if (!input.engineering || !input.trueTotal) return null;
   const offsetStrain = 0.002;
-  const residual = (point: CurvePoint) =>
-    point.stress - youngsModulus * (point.strain - offsetStrain);
-  for (let index = 1; index < input.uploaded.length; index += 1) {
-    const previous = input.uploaded[index - 1];
-    const current = input.uploaded[index];
+  const residual = (point: CurvePoint) => point.stress - youngsModulus * (point.strain - offsetStrain);
+  for (let index = 1; index < input.engineering.length; index += 1) {
+    const previous = input.engineering[index - 1];
+    const current = input.engineering[index];
     const previousResidual = residual(previous);
     const currentResidual = residual(current);
-    if (previousResidual >= 0 && currentResidual <= 0) {
-      const denominator = previousResidual - currentResidual;
-      const ratio = denominator === 0 ? 0 : previousResidual / denominator;
-      const previousTrue = input.trueTotal[index - 1];
-      const currentTrue = input.trueTotal[index];
-      return {
-        sourceStrain: previous.strain + ratio * (current.strain - previous.strain),
-        sourceStress: previous.stress + ratio * (current.stress - previous.stress),
-        trueStrain: previousTrue.strain + ratio * (currentTrue.strain - previousTrue.strain),
-        stress: previousTrue.stress + ratio * (currentTrue.stress - previousTrue.stress),
-      };
-    }
+    if (previousResidual < 0 || currentResidual > 0) continue;
+    const denominator = previousResidual - currentResidual;
+    const ratio = denominator === 0 ? 0 : previousResidual / denominator;
+    const engineering = {
+      strain: previous.strain + ratio * (current.strain - previous.strain),
+      stress: previous.stress + ratio * (current.stress - previous.stress),
+    };
+    const previousTrue = input.trueTotal[index - 1];
+    const currentTrue = input.trueTotal[index];
+    const trueTotal = {
+      strain: previousTrue.strain + ratio * (currentTrue.strain - previousTrue.strain),
+      stress: previousTrue.stress + ratio * (currentTrue.stress - previousTrue.stress),
+    };
+    const rawPlasticStrain = trueTotal.strain - trueTotal.stress / youngsModulus;
+    return {
+      engineering,
+      trueTotal,
+      relativePlasticStrain: rawPlasticStrain - proportionalLimit.rawPlasticStrain,
+    };
   }
-  throw new Error("入力曲線と0.2%オフセット直線の交点を求められませんでした。");
+  return null;
 }
 
-/** Keeps points after yield and shifts the interpolated yield strain to zero. */
+function prepareDirectPlastic(input: PreparedInputData): PreparedData {
+  const directPlastic = input.directPlastic;
+  if (!directPlastic) throw new Error("真応力–真塑性ひずみデータがありません。");
+  if (Math.abs(directPlastic[0].strain) > CURVE_POINT_TOLERANCE) {
+    throw new Error("真応力–真塑性ひずみ直接入力の先頭点は塑性ひずみ0にしてください。");
+  }
+  if (directPlastic.some((point) => point.strain < -CURVE_POINT_TOLERANCE)) {
+    throw new Error("真塑性ひずみには0以上の値を指定してください。");
+  }
+  const plastic = directPlastic.map((point, index) => ({
+    strain: index === 0 ? 0 : point.strain,
+    stress: point.stress,
+  }));
+  return {
+    ...input,
+    plastic,
+    proportionalLimit: {
+      trueStrain: null,
+      rawPlasticStrain: 0,
+      stress: plastic[0].stress,
+      method: "direct-input",
+    },
+    proofStress: null,
+    tensileStrength: { ...input.tensileStrength, plastic: input.tensileStrength.uploaded },
+  };
+}
+
+/** Converts total strain input, detects a proportional-limit candidate, and retains measured plastic data. */
 export function prepareData(
   table: CsvTable,
   mapping: DataMapping,
   material: MaterialProperties,
-  method: ConversionMethod,
+  proportionalLimitTrueStrain?: number,
 ): PreparedData {
   const input = prepareInputData(table, mapping);
-  if (method === "specified-yield" && !(material.yieldStress > 0)) {
-    throw new Error("降伏応力は0より大きい値が必要です。");
+  if (mapping.dataKind === "true-plastic") return prepareDirectPlastic(input);
+  if (!(material.youngsModulus > 0)) throw new Error("ヤング率は0より大きい値が必要です。");
+  const trueTotal = input.trueTotal;
+  if (!trueTotal || !input.tensileStrength.trueTotal) throw new Error("真全ひずみデータがありません。");
+  const rawPlastic = trueTotal.map((point) => ({
+    strain: point.strain,
+    stress: point.strain - point.stress / material.youngsModulus,
+  }));
+  const proportionalLimit =
+    proportionalLimitTrueStrain === undefined
+      ? detectProportionalLimit(trueTotal, rawPlastic)
+      : interpolateRawPlastic(trueTotal, rawPlastic, proportionalLimitTrueStrain);
+  const plastic = trueTotal
+    .filter((point) => point.strain >= proportionalLimit.trueStrain!)
+    .map((point) => ({
+      strain:
+        point.strain - point.stress / material.youngsModulus - proportionalLimit.rawPlasticStrain,
+      stress: point.stress,
+    }));
+  plastic.push({ strain: 0, stress: proportionalLimit.stress });
+  plastic.sort((left, right) => left.strain - right.strain);
+  const warnings = [...input.warnings];
+  if (plastic.some((point) => point.strain < -CURVE_POINT_TOLERANCE)) {
+    warnings.push("比例限度候補より後に負の相対真塑性ひずみがあります。候補を確認してください。");
   }
-  const yieldPoint =
-    method === "specified-yield"
-      ? interpolateSpecifiedYieldPoint(input.trueTotal, material.yieldStress)
-      : interpolateProofStressPoint(input, material.youngsModulus);
-  const toPlastic = (point: CurvePoint): CurvePoint => ({
-    strain: point.strain - yieldPoint.trueStrain,
-    stress: point.stress,
-  });
-  const plastic = input.trueTotal
-    .filter((point) => point.strain >= yieldPoint.trueStrain)
-    .map(toPlastic);
-  const hasYieldPoint = plastic.some(
-    (point) =>
-      Math.abs(point.strain) <= YIELD_POINT_TOLERANCE &&
-      Math.abs(point.stress - yieldPoint.stress) <=
-        Math.max(1, yieldPoint.stress) * YIELD_POINT_TOLERANCE,
-  );
-  if (!hasYieldPoint) plastic.push({ strain: 0, stress: yieldPoint.stress });
-  plastic.sort((a, b) => a.strain - b.strain);
   const duplicateCount = plastic.reduce(
     (count, point, index) =>
-      index > 0 && point.strain === plastic[index - 1].strain ? count + 1 : count,
+      index > 0 && Math.abs(point.strain - plastic[index - 1].strain) <= CURVE_POINT_TOLERANCE
+        ? count + 1
+        : count,
     0,
   );
-  const warnings = [...input.warnings];
   if (duplicateCount) warnings.push(`${duplicateCount}点で塑性ひずみが重複しています。`);
+  const tensileTrue = input.tensileStrength.trueTotal;
+  const tensilePlastic = {
+    strain:
+      tensileTrue.strain -
+      tensileTrue.stress / material.youngsModulus -
+      proportionalLimit.rawPlasticStrain,
+    stress: tensileTrue.stress,
+  };
   return {
     ...input,
     plastic,
-    yieldPoint: { ...yieldPoint, method },
-    tensileStrength: {
-      ...input.tensileStrength,
-      plastic: toPlastic(input.tensileStrength.trueTotal),
-    },
+    proportionalLimit,
+    proofStress: calculateProofStress(input, material.youngsModulus, proportionalLimit),
+    tensileStrength: { ...input.tensileStrength, plastic: tensilePlastic },
     warnings,
   };
 }

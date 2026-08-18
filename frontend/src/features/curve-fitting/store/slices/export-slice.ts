@@ -13,12 +13,18 @@ export const createExportSlice: CurveWorkflowSlice<ExportSlice> = (set, get) => 
     if (!exportModel || !prepared) return;
     const fit = fits[exportModel];
     if (!fit) return;
+    if (fit.diagnostics.exportBlocked) {
+      set({ error: "接続点前後の接線係数が非物理的なためエクスポートできません。" });
+      return;
+    }
     try {
       set({
         exportResult: generateExport(
           exportModel,
-          prepared.yieldPoint.stress,
+          prepared.proportionalLimit.stress,
           fit.parameters,
+          prepared.plastic,
+          fit.connection,
           exportSettings,
         ),
         error: null,

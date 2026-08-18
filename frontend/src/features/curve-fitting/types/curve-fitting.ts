@@ -1,5 +1,4 @@
-export type InputDataKind = "engineering" | "true";
-export type ConversionMethod = "specified-yield" | "proof-0.2";
+export type InputDataKind = "engineering" | "true-total" | "true-plastic";
 export type StressUnit = "Pa" | "MPa" | "GPa";
 export type StrainUnit = "decimal" | "percent";
 export type HardeningModel = "ludwik" | "swift" | "voce";
@@ -25,31 +24,54 @@ export interface DataMapping {
 
 export interface MaterialProperties {
   youngsModulus: number;
-  yieldStress: number;
 }
 
 export interface PreparedInputData {
+  dataKind: InputDataKind;
   uploaded: CurvePoint[];
-  trueTotal: CurvePoint[];
+  engineering: CurvePoint[] | null;
+  trueTotal: CurvePoint[] | null;
+  directPlastic: CurvePoint[] | null;
   tensileStrength: {
     uploaded: CurvePoint;
-    trueTotal: CurvePoint;
+    engineering: CurvePoint | null;
+    trueTotal: CurvePoint | null;
   };
   warnings: string[];
 }
 
+export interface ProportionalLimitPoint {
+  trueStrain: number | null;
+  rawPlasticStrain: number;
+  stress: number;
+  method: "automatic" | "manual" | "direct-input";
+}
+
+export interface ProofStressPoint {
+  engineering: CurvePoint;
+  trueTotal: CurvePoint;
+  relativePlasticStrain: number;
+}
+
 export interface PreparedData extends PreparedInputData {
   plastic: CurvePoint[];
-  yieldPoint: {
-    sourceStrain: number;
-    sourceStress: number;
-    trueStrain: number;
-    stress: number;
-    method: ConversionMethod;
-  };
+  proportionalLimit: ProportionalLimitPoint;
+  proofStress: ProofStressPoint | null;
   tensileStrength: PreparedInputData["tensileStrength"] & {
     plastic: CurvePoint;
   };
+}
+
+export interface CurveConnection {
+  strain: number;
+  stress: number;
+}
+
+export interface ConnectionDiagnostics {
+  leftTangent: number;
+  rightTangent: number;
+  hasSignReversal: boolean;
+  exportBlocked: boolean;
 }
 
 export interface ModelParameters {
@@ -73,6 +95,8 @@ export interface FitResult {
   metrics: FitMetrics;
   iterations: number;
   range: [number, number];
+  connection: CurveConnection;
+  diagnostics: ConnectionDiagnostics;
 }
 
 export type FitResults = Partial<Record<HardeningModel, FitResult>>;

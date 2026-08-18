@@ -1,4 +1,5 @@
 import { calculateMetrics } from "@/features/curve-fitting/lib/metrics";
+import { calculateConnectionDiagnostics } from "@/features/curve-fitting/lib/hybrid-curve";
 import { HARDENING_MODELS } from "@/features/curve-fitting/constants/curve-fitting";
 import type { CurveWorkflowSlice, FittingSlice } from "@/features/curve-fitting/store/types";
 import type { FitResults, ModelParameterSets } from "@/features/curve-fitting/types/curve-fitting";
@@ -32,14 +33,22 @@ export const createFittingSlice: CurveWorkflowSlice<FittingSlice> = (set, get) =
       exportResult: null,
     })),
   runFits: async () => {
-    const { prepared, selectedModels, fitRange } = get();
+    const { prepared, proportionalLimitConfirmed, selectedModels, fitRange, recommendedFitEnd } = get();
     if (!prepared) return;
+    if (!proportionalLimitConfirmed) {
+      set({ error: "比例限度候補を確認してからフィッティングしてください。" });
+      return;
+    }
     if (selectedModels.length === 0) {
       set({ error: "フィッティングする硬化則を1つ以上選択してください。" });
       return;
     }
     if (fitRange[0] < 0 || fitRange[1] <= fitRange[0]) {
       set({ error: "終了塑性ひずみは開始塑性ひずみより大きい0以上の範囲で指定してください。" });
+      return;
+    }
+    if (fitRange[1] > recommendedFitEnd) {
+      set({ error: "接続点は引張強度点以前にしてください。" });
       return;
     }
     set({ busy: true, error: null });
@@ -49,7 +58,7 @@ export const createFittingSlice: CurveWorkflowSlice<FittingSlice> = (set, get) =
           runFitWorker({
             points: prepared.plastic,
             model,
-            yieldStress: prepared.yieldPoint.stress,
+            initialStress: prepared.proportionalLimit.stress,
             range: fitRange,
           }),
         ),
@@ -93,7 +102,20 @@ export const createFittingSlice: CurveWorkflowSlice<FittingSlice> = (set, get) =
           [model]: {
             ...fit,
             parameters,
-            metrics: calculateMetrics(points, model, state.prepared.yieldPoint.stress, parameters),
+            metrics: calculateMetrics(
+              points,
+              model,
+              state.prepared.proportionalLimit.stress,
+              parameters,
+              fit.connection,
+            ),
+            diagnostics: calculateConnectionDiagnostics(
+              state.prepared.plastic,
+              model,
+              state.prepared.proportionalLimit.stress,
+              parameters,
+              fit.connection,
+            ),
           },
         },
         exportResult: null,
@@ -114,7 +136,20 @@ export const createFittingSlice: CurveWorkflowSlice<FittingSlice> = (set, get) =
         [model]: {
           ...fit,
           parameters,
-          metrics: calculateMetrics(points, model, state.prepared.yieldPoint.stress, parameters),
+          metrics: calculateMetrics(
+            points,
+            model,
+            state.prepared.proportionalLimit.stress,
+            parameters,
+            fit.connection,
+          ),
+          diagnostics: calculateConnectionDiagnostics(
+            state.prepared.plastic,
+            model,
+            state.prepared.proportionalLimit.stress,
+            parameters,
+            fit.connection,
+          ),
         },
       },
       exportResult: null,

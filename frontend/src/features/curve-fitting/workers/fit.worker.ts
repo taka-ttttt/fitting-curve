@@ -7,14 +7,14 @@ export interface FitWorkerRequest {
   id: string;
   points: CurvePoint[];
   model: HardeningModel;
-  yieldStress: number;
+  initialStress: number;
   range: [number, number];
 }
 
 self.onmessage = (event: MessageEvent<FitWorkerRequest>) => {
-  const { id, points, model, yieldStress, range } = event.data;
+  const { id, points, model, initialStress, range } = event.data;
   try {
-    self.postMessage({ id, result: fitHardeningModel(points, model, yieldStress, range) });
+    self.postMessage({ id, result: fitHardeningModel(points, model, initialStress, range) });
   } catch (error) {
     self.postMessage({ id, error: error instanceof Error ? error.message : String(error) });
   }

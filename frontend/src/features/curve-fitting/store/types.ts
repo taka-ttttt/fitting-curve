@@ -3,7 +3,6 @@ import type { StateCreator } from "zustand";
 import type {
   CsvTable,
   DataMapping,
-  ConversionMethod,
   ExportResult,
   ExportSettings,
   FitResults,
@@ -26,16 +25,17 @@ export interface ImportSlice {
   inputData: PreparedInputData | null;
   mapping: DataMapping;
   material: MaterialProperties;
-  conversionMethod: ConversionMethod;
   setTable: (fileName: string, table: CsvTable) => void;
   updateMapping: (patch: Partial<DataMapping>) => void;
   updateMaterial: (patch: Partial<MaterialProperties>) => void;
-  setConversionMethod: (method: ConversionMethod) => void;
 }
 
 export interface ConversionSlice {
   prepared: PreparedData | null;
+  proportionalLimitConfirmed: boolean;
   convert: () => void;
+  setProportionalLimit: (trueStrain: number) => void;
+  confirmProportionalLimit: () => void;
 }
 
 export interface FittingSlice {

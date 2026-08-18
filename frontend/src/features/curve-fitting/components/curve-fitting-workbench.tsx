@@ -20,7 +20,7 @@ export function CurveFittingWorkbench() {
           Material Curve Fitter
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          引張試験データを真応力–真塑性ひずみに変換し、Ludwik・Swift・Voce硬化則へフィッティングします。データはブラウザ内だけで処理されます。
+          比例限度を基準に真応力–真塑性ひずみへ変換し、実測データとLudwik・Swift・Voce硬化則を連続接続します。データはブラウザ内だけで処理されます。
         </p>
       </header>
 
