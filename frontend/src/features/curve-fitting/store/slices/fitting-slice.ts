@@ -48,7 +48,7 @@ export const createFittingSlice: CurveWorkflowSlice<FittingSlice> = (set, get) =
       return;
     }
     if (fitRange[1] > recommendedFitEnd) {
-      set({ error: "接続点は引張強度点以前にしてください。" });
+      set({ error: "フィッティング終点は引張強度点以前にしてください。" });
       return;
     }
     set({ busy: true, error: null });

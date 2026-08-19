@@ -70,14 +70,6 @@ export function useFittingStep() {
         color: CURVE_COLORS[model],
         dashed: true,
       });
-      series.push({
-        name: `${HARDENING_MODEL_LABELS[model]} 接続点`,
-        points: [fit.connection],
-        color: CURVE_COLORS.connection,
-        pointsOnly: true,
-        symbol: "diamond",
-        symbolSize: 12,
-      });
     });
     return series;
   }, [state.fitRange, state.fits, state.prepared, state.selectedModels]);
@@ -89,8 +81,8 @@ export function useFittingStep() {
     if (!Number.isFinite(start) || !Number.isFinite(end)) return "開始・終了塑性ひずみを入力してください。";
     if (start < 0 || end < 0) return "開始・終了塑性ひずみは0以上で指定してください。";
     if (start >= end) return "終了塑性ひずみは開始塑性ひずみより大きくしてください。";
-    if (end > state.prepared.plastic.at(-1)!.strain) return "接続点は実測範囲内にしてください。";
-    if (end > state.recommendedFitEnd) return "接続点は引張強度点以前にしてください。";
+    if (end > state.prepared.plastic.at(-1)!.strain) return "フィッティング終点は実測範囲内にしてください。";
+    if (end > state.recommendedFitEnd) return "フィッティング終点は引張強度点以前にしてください。";
     const pointCount = state.prepared.plastic.filter(
       (point) => point.strain >= start && point.strain <= end,
     ).length;

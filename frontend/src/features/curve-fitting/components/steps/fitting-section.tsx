@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { RotateCcw, WandSparkles } from "lucide-react";
 
 import { CurveChart } from "@/features/curve-fitting/components/curve-chart";
@@ -87,7 +86,6 @@ function formatMetric(value: number): string {
 
 export function FittingSection() {
   const { state, fittedSeries, fitRangeError } = useFittingStep();
-  const [graphRangeTarget, setGraphRangeTarget] = useState<"start" | "connection">("connection");
 
   if (!state.prepared || !state.proportionalLimitConfirmed) return null;
 
@@ -96,7 +94,7 @@ export function FittingSection() {
       <CardHeader>
         <CardTitle>3. 硬化則のフィッティング</CardTitle>
         <CardDescription>
-          フィッティング始点から接続点までで硬化則を同定し、接続点までは実測、以降は接続補正後の硬化則を使用します。
+          フィッティング始点からフィッティング終点までで硬化則を同定し、フィッティング終点までは実測、以降は接続補正後の硬化則を使用します。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -123,17 +121,17 @@ export function FittingSection() {
             label="フィッティング始点"
             value={state.fitRange[0]}
             min={0}
-            step={0.01}
+            step={0.001}
             disabled={state.busy}
             onChange={(value) => state.setFitRange([value, state.fitRange[1]])}
           />
           <div>
             <NumberField
               id="fit-end"
-              label="実測・硬化則接続点"
+              label="フィッティング終点"
               value={state.fitRange[1]}
               min={0}
-              step={0.01}
+              step={0.001}
               disabled={state.busy}
               description="既定値は工学応力最大点です。ここまでは実測を保持し、以降を硬化則へ接続します。"
               onChange={(value) => state.setFitRange([state.fitRange[0], value])}
@@ -145,7 +143,7 @@ export function FittingSection() {
               disabled={state.busy}
               onClick={state.resetFitEnd}
             >
-              <RotateCcw className="size-3.5" /> 推奨接続点に戻す
+              <RotateCcw className="size-3.5" /> 推奨フィッティング終点に戻す
             </Button>
           </div>
           <div className="flex items-end pb-10">
@@ -161,36 +159,10 @@ export function FittingSection() {
 
         {fitRangeError && <p className="text-sm text-red-700">{fitRangeError}</p>}
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-          <span>グラフ上の点をクリックして調整:</span>
-          <Button
-            type="button"
-            size="sm"
-            variant={graphRangeTarget === "start" ? "default" : "outline"}
-            onClick={() => setGraphRangeTarget("start")}
-          >
-            フィッティング始点
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={graphRangeTarget === "connection" ? "default" : "outline"}
-            onClick={() => setGraphRangeTarget("connection")}
-          >
-            接続点
-          </Button>
-        </div>
         <CurveChart
           series={fittedSeries}
           xLabel="真塑性ひずみ [-]"
           fitRange={state.fitRange}
-          onPointSelect={(strain) =>
-            state.setFitRange(
-              graphRangeTarget === "start"
-                ? [strain, state.fitRange[1]]
-                : [state.fitRange[0], strain],
-            )
-          }
         />
 
         <div className="grid gap-4 xl:grid-cols-3">

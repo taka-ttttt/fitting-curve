@@ -11,7 +11,7 @@ import type {
 export function interpolateStress(points: CurvePoint[], strain: number): number {
   if (points.length === 0) throw new Error("補間する実測点がありません。");
   if (strain < points[0].strain - CURVE_POINT_TOLERANCE || strain > points.at(-1)!.strain + CURVE_POINT_TOLERANCE) {
-    throw new Error("接続点は実測塑性ひずみ範囲内にしてください。");
+    throw new Error("フィッティング終点は実測塑性ひずみ範囲内にしてください。");
   }
   if (strain <= points[0].strain) return points[0].stress;
   if (strain >= points.at(-1)!.strain) return points.at(-1)!.stress;

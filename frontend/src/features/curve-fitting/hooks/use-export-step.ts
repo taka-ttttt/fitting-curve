@@ -77,7 +77,7 @@ export function useExportStep() {
           dashed: true,
         },
         {
-          name: "接続点",
+          name: "フィッティング終点",
           points: [fit.connection],
           color: CURVE_COLORS.connection,
           pointsOnly: true,
