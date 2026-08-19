@@ -70,8 +70,21 @@ export interface CurveConnection {
 export interface ConnectionDiagnostics {
   leftTangent: number;
   rightTangent: number;
+  targetTangent: number;
+  tangentRelativeError: number;
   hasSignReversal: boolean;
   exportBlocked: boolean;
+}
+
+export type FitSensitivityRating = "stable" | "warning" | "unstable";
+
+export interface FitSensitivity {
+  evaluationStrain: number;
+  minimumStress: number;
+  maximumStress: number;
+  relativeSpread: number;
+  rating: FitSensitivityRating;
+  evaluatedTransitionEnds: number[];
 }
 
 export interface ModelParameters {
@@ -96,7 +109,9 @@ export interface FitResult {
   iterations: number;
   range: [number, number];
   connection: CurveConnection;
+  usesConsidereTarget: boolean;
   diagnostics: ConnectionDiagnostics;
+  sensitivity: FitSensitivity | null;
 }
 
 export type FitResults = Partial<Record<HardeningModel, FitResult>>;

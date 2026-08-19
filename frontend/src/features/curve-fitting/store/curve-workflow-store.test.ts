@@ -41,12 +41,16 @@ const fit: FitResult = {
   iterations: 1,
   range: [0.01, 0.1],
   connection: { strain: 0.1, stress: 400 },
+  usesConsidereTarget: true,
   diagnostics: {
     leftTangent: 1_000,
     rightTangent: 367.879,
+    targetTangent: 401,
+    tangentRelativeError: 0.0826,
     hasSignReversal: false,
     exportBlocked: false,
   },
+  sensitivity: null,
 };
 const exportResult: ExportResult = {
   points: [],
@@ -74,6 +78,8 @@ describe("curve workflow store", () => {
       selectedModels: ["swift"],
       fitRange: [0, 0.2],
       recommendedFitEnd: 0.2,
+      connectionStrain: 0.2,
+      recommendedConnectionStrain: 0.2,
       busy: false,
     });
   });
@@ -151,6 +157,8 @@ describe("curve workflow store", () => {
     useCurveWorkflowStore.setState({
       fitRange: [0.01, 0.1],
       recommendedFitEnd: 0.15,
+      connectionStrain: 0.15,
+      recommendedConnectionStrain: 0.15,
       fits: { voce: fit },
       automaticParameters: { voce: fit.parameters },
       exportModel: "voce",
@@ -163,5 +171,22 @@ describe("curve workflow store", () => {
     expect(state.fitRange).toEqual([0.01, 0.15]);
     expect(state.fits).toEqual({});
     expect(state.exportModel).toBeNull();
+  });
+
+  it("restores the recommended connection independently from the fitting end", () => {
+    useCurveWorkflowStore.setState({
+      fitRange: [0.01, 0.1],
+      connectionStrain: 0.12,
+      recommendedConnectionStrain: 0.15,
+      fits: { voce: fit },
+      automaticParameters: { voce: fit.parameters },
+    });
+
+    useCurveWorkflowStore.getState().resetConnection();
+
+    const state = useCurveWorkflowStore.getState();
+    expect(state.fitRange).toEqual([0.01, 0.1]);
+    expect(state.connectionStrain).toBe(0.15);
+    expect(state.fits).toEqual({});
   });
 });

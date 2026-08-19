@@ -29,7 +29,7 @@ export function ExportSection() {
       <CardHeader>
         <CardTitle>4. エクスポート</CardTitle>
         <CardDescription>
-          比例限度付近を密にし、フィッティング終点を必ず含む非等間隔点を生成します。フィッティング終点までは実測補間、それ以降は接続補正後の硬化則です。
+          比例限度付近を密にし、接続点を必ず含む非等間隔点を生成します。接続点までは実測補間、それ以降は接続制約後の硬化則です。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -49,7 +49,7 @@ export function ExportSection() {
         </div>
         {selectedFit && (
           <div className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700">
-            フィッティング終点: 塑性ひずみ {formatMetric(selectedFit.connection.strain)}、真応力 {formatMetric(selectedFit.connection.stress)} MPa
+            実測・硬化則接続点: 塑性ひずみ {formatMetric(selectedFit.connection.strain)}、真応力 {formatMetric(selectedFit.connection.stress)} MPa
           </div>
         )}
         {selectedFit?.diagnostics.exportBlocked && (
@@ -95,7 +95,7 @@ export function ExportSection() {
         {state.exportResult && (
           <>
             {selectedFit && state.exportResult.points.at(-1)!.strain > selectedFit.connection.strain && (
-              <Alert>フィッティング終点より後は、実測値ではなく接続補正した硬化則による外挿値です。</Alert>
+              <Alert>接続点より後は、実測値ではなく接続制約を満たす硬化則による外挿値です。</Alert>
             )}
             <CurveChart series={exportSeries} xLabel="真塑性ひずみ [-]" />
             <div className="grid gap-3 sm:grid-cols-3">

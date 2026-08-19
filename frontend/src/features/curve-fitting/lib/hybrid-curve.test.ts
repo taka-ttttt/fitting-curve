@@ -15,14 +15,15 @@ const measured = [
 const parameters = { Q: 200, b: 5 };
 
 describe("hybrid measured/model curve", () => {
-  it("preserves measured interpolation through the connection and joins the shifted model continuously", () => {
+  it("preserves measured interpolation and uses the unshifted constrained model after connection", () => {
     const connection = createConnection(measured, 0.075);
+    const constrainedParameters = { Q: 125 / (1 - Math.exp(-5 * 0.075)), b: 5 };
 
     expect(connection.stress).toBe(425);
-    expect(evaluateHybridCurve(measured, "voce", 0.025, 300, parameters, connection)).toBe(350);
-    expect(evaluateConnectedModel("voce", 0.075, 300, parameters, connection)).toBeCloseTo(425, 12);
-    expect(evaluateHybridCurve(measured, "voce", 0.075, 300, parameters, connection)).toBe(425);
-    expect(evaluateHybridCurve(measured, "voce", 0.08, 300, parameters, connection)).toBeGreaterThan(425);
+    expect(evaluateHybridCurve(measured, "voce", 0.025, 300, constrainedParameters, connection)).toBe(350);
+    expect(evaluateConnectedModel("voce", 0.075, 300, constrainedParameters, connection)).toBeCloseTo(425, 12);
+    expect(evaluateHybridCurve(measured, "voce", 0.075, 300, constrainedParameters, connection)).toBe(425);
+    expect(evaluateHybridCurve(measured, "voce", 0.08, 300, constrainedParameters, connection)).toBeGreaterThan(425);
   });
 
   it("blocks export when the measured tangent immediately before the connection is negative", () => {
@@ -38,6 +39,7 @@ describe("hybrid measured/model curve", () => {
       300,
       parameters,
       connection,
+      210_000,
     );
 
     expect(diagnostics.leftTangent).toBeLessThan(0);

@@ -9,6 +9,7 @@ interface NumberFieldProps {
   value: number;
   onChange: (value: number) => void;
   min?: number;
+  max?: number;
   step?: number | "any";
   description?: string;
   disabled?: boolean;
@@ -20,6 +21,7 @@ export function NumberField({
   value,
   onChange,
   min,
+  max,
   step = "any",
   description,
   disabled,
@@ -51,6 +53,7 @@ export function NumberField({
         type="number"
         value={Number.isFinite(value) ? value : ""}
         min={min}
+        max={max}
         step={step}
         disabled={disabled}
         onChange={(event) => {

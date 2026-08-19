@@ -10,6 +10,7 @@ import {
   GridComponent,
   LegendComponent,
   MarkAreaComponent,
+  MarkLineComponent,
   ToolboxComponent,
   TooltipComponent,
 } from "echarts/components";
@@ -28,6 +29,7 @@ echarts.use([
   GridComponent,
   LegendComponent,
   MarkAreaComponent,
+  MarkLineComponent,
   ToolboxComponent,
   TooltipComponent,
   CanvasRenderer,
@@ -90,7 +92,17 @@ export function CurveChart({
             ? {
                 silent: true,
                 itemStyle: { color: "rgba(8, 145, 178, 0.08)" },
-                data: [[{ xAxis: fitRange[0] }, { xAxis: fitRange[1] }]],
+                data: [[{ xAxis: 0 }, { xAxis: fitRange[1] }]],
+              }
+            : undefined,
+        markLine:
+          index === 0 && fitRange
+            ? {
+                silent: true,
+                symbol: "none",
+                label: { formatter: "降伏遷移終了", position: "insideEndTop" },
+                lineStyle: { color: "#0891b2", type: "dashed", width: 1 },
+                data: [{ xAxis: fitRange[0] }],
               }
             : undefined,
       })),

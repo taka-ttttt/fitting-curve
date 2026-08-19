@@ -9,12 +9,35 @@ export interface FitWorkerRequest {
   model: HardeningModel;
   initialStress: number;
   range: [number, number];
+  connectionStrain: number;
+  youngsModulus: number;
+  usesConsidereTarget: boolean;
 }
 
 self.onmessage = (event: MessageEvent<FitWorkerRequest>) => {
-  const { id, points, model, initialStress, range } = event.data;
+  const {
+    id,
+    points,
+    model,
+    initialStress,
+    range,
+    connectionStrain,
+    youngsModulus,
+    usesConsidereTarget,
+  } = event.data;
   try {
-    self.postMessage({ id, result: fitHardeningModel(points, model, initialStress, range) });
+    self.postMessage({
+      id,
+      result: fitHardeningModel(
+        points,
+        model,
+        initialStress,
+        range,
+        connectionStrain,
+        youngsModulus,
+        usesConsidereTarget,
+      ),
+    });
   } catch (error) {
     self.postMessage({ id, error: error instanceof Error ? error.message : String(error) });
   }

@@ -42,12 +42,16 @@ export interface FittingSlice {
   selectedModels: HardeningModel[];
   fitRange: [number, number];
   recommendedFitEnd: number;
+  connectionStrain: number;
+  recommendedConnectionStrain: number;
   fits: FitResults;
   automaticParameters: ModelParameterSets;
   busy: boolean;
   toggleModel: (model: HardeningModel) => void;
   setFitRange: (range: [number, number]) => void;
+  setConnectionStrain: (strain: number) => void;
   resetFitEnd: () => void;
+  resetConnection: () => void;
   runFits: () => Promise<void>;
   updateParameter: (model: HardeningModel, name: keyof ModelParameters, value: number) => void;
   resetParameters: (model: HardeningModel) => void;
